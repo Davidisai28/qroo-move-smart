@@ -168,7 +168,7 @@ const MapView = () => {
         className="w-full h-full rounded-lg"
         style={{ minHeight: "500px" }}
       >
-        <MapContent />
+        {((_: any) => <MapContent />) as unknown as React.ReactNode}
       </MapContainer>
 
       {/* Status Bar */}
