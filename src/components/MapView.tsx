@@ -97,6 +97,69 @@ const MapView = () => {
     });
   };
 
+  const MapContent = () => (
+    <>
+      <TileLayer
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+      />
+      
+      {vehicles.map((vehicle) => (
+        <Marker
+          key={vehicle.id}
+          position={vehicle.position}
+          icon={createCustomIcon(vehicle.type, vehicle.occupancy)}
+        >
+          <Popup>
+            <div className="p-2 min-w-[200px]">
+              <h3 className="font-poppins font-semibold text-base mb-2 text-primary">
+                {vehicle.route}
+              </h3>
+              <div className="space-y-1 text-sm">
+                <div className="flex items-center gap-2">
+                  <Bus className="w-4 h-4 text-primary" />
+                  <span className="font-medium">
+                    {vehicle.type === "bus" ? "Autobús" : "Combi"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Users className="w-4 h-4 text-primary" />
+                  <span>
+                    Ocupación: {vehicle.occupancy.toFixed(0)}% ({Math.floor((vehicle.occupancy / 100) * vehicle.capacity)}/{vehicle.capacity})
+                  </span>
+                </div>
+                <div className="text-muted-foreground">
+                  <p>Empresa: {vehicle.company}</p>
+                  <p>Kilómetros: {vehicle.km} km</p>
+                  <p>Horas laboradas: {vehicle.hours}h</p>
+                </div>
+                <div className="mt-2 pt-2 border-t">
+                  <div 
+                    className="h-2 rounded-full"
+                    style={{ 
+                      background: getOccupancyColor(vehicle.occupancy),
+                      width: `${vehicle.occupancy}%`
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          </Popup>
+        </Marker>
+      ))}
+      
+      <Circle
+        center={cancunCenter}
+        radius={5000}
+        pathOptions={{ 
+          color: "#9C1C3B", 
+          fillColor: "#9C1C3B", 
+          fillOpacity: 0.1 
+        }}
+      />
+    </>
+  );
+
   return (
     <div className="relative w-full h-full">
       <MapContainer
@@ -105,65 +168,7 @@ const MapView = () => {
         className="w-full h-full rounded-lg"
         style={{ minHeight: "500px" }}
       >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
-        
-        {vehicles.map((vehicle) => (
-          <Marker
-            key={vehicle.id}
-            position={vehicle.position}
-            icon={createCustomIcon(vehicle.type, vehicle.occupancy)}
-          >
-            <Popup>
-              <div className="p-2 min-w-[200px]">
-                <h3 className="font-poppins font-semibold text-base mb-2 text-primary">
-                  {vehicle.route}
-                </h3>
-                <div className="space-y-1 text-sm">
-                  <div className="flex items-center gap-2">
-                    <Bus className="w-4 h-4 text-primary" />
-                    <span className="font-medium">
-                      {vehicle.type === "bus" ? "Autobús" : "Combi"}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Users className="w-4 h-4 text-primary" />
-                    <span>
-                      Ocupación: {vehicle.occupancy.toFixed(0)}% ({Math.floor((vehicle.occupancy / 100) * vehicle.capacity)}/{vehicle.capacity})
-                    </span>
-                  </div>
-                  <div className="text-muted-foreground">
-                    <p>Empresa: {vehicle.company}</p>
-                    <p>Kilómetros: {vehicle.km} km</p>
-                    <p>Horas laboradas: {vehicle.hours}h</p>
-                  </div>
-                  <div className="mt-2 pt-2 border-t">
-                    <div 
-                      className="h-2 rounded-full"
-                      style={{ 
-                        background: getOccupancyColor(vehicle.occupancy),
-                        width: `${vehicle.occupancy}%`
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-            </Popup>
-          </Marker>
-        ))}
-        
-        {/* Example coverage area */}
-        <Circle
-          center={cancunCenter}
-          radius={5000}
-          pathOptions={{ 
-            color: "#9C1C3B", 
-            fillColor: "#9C1C3B", 
-            fillOpacity: 0.1 
-          }}
-        />
+        <MapContent />
       </MapContainer>
 
       {/* Status Bar */}
