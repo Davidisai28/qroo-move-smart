@@ -1,23 +1,15 @@
 import { useEffect, useState } from "react";
-import { MapContainer, TileLayer, Marker, Popup, Circle } from "react-leaflet";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
 import { Bus, Users } from "lucide-react";
-
-// Fix for default marker icon in Leaflet
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
-  iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
-  shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
-});
+import { ROUTES, getPositionOnRoute } from "@/data/routes";
 
 interface Vehicle {
   id: string;
   type: "bus" | "combi";
-  route: string;
+  routeId: number;
+  routeName: string;
   company: string;
   position: [number, number];
+  routeProgress: number; // 0-1 progreso en la ruta
   occupancy: number;
   capacity: number;
   km: number;
@@ -29,34 +21,44 @@ const MapView = () => {
   const cancunCenter: [number, number] = [21.1619, -86.8515];
 
   useEffect(() => {
-    // Simulated vehicles data
-    const mockVehicles: Vehicle[] = Array.from({ length: 30 }, (_, i) => ({
-      id: `VEH-${i + 1}`,
-      type: i % 3 === 0 ? "combi" : "bus",
-      route: `Ruta ${(i % 87) + 1}`,
-      company: `Empresa ${(i % 8) + 1}`,
-      position: [
-        21.1619 + (Math.random() - 0.5) * 0.1,
-        -86.8515 + (Math.random() - 0.5) * 0.1,
-      ] as [number, number],
-      occupancy: Math.floor(Math.random() * 100),
-      capacity: i % 3 === 0 ? 25 : 47,
-      km: Math.floor(Math.random() * 200) + 50,
-      hours: Math.floor(Math.random() * 12) + 1,
-    }));
+    // Simulated vehicles data with assigned routes
+    const mockVehicles: Vehicle[] = Array.from({ length: 30 }, (_, i) => {
+      const route = ROUTES[i % ROUTES.length];
+      const initialProgress = Math.random();
+      return {
+        id: `VEH-${i + 1}`,
+        type: i % 3 === 0 ? "combi" : "bus",
+        routeId: route.id,
+        routeName: route.name,
+        company: `Empresa ${(i % 8) + 1}`,
+        position: getPositionOnRoute(route, initialProgress),
+        routeProgress: initialProgress,
+        occupancy: Math.floor(Math.random() * 100),
+        capacity: i % 3 === 0 ? 25 : 47,
+        km: Math.floor(Math.random() * 200) + 50,
+        hours: Math.floor(Math.random() * 12) + 1,
+      };
+    });
     setVehicles(mockVehicles);
 
-    // Simulate real-time updates
+    // Simulate real-time updates - vehicles move along their routes
     const interval = setInterval(() => {
       setVehicles((prev) =>
-        prev.map((v) => ({
-          ...v,
-          position: [
-            v.position[0] + (Math.random() - 0.5) * 0.001,
-            v.position[1] + (Math.random() - 0.5) * 0.001,
-          ] as [number, number],
-          occupancy: Math.max(0, Math.min(100, v.occupancy + (Math.random() - 0.5) * 10)),
-        }))
+        prev.map((v) => {
+          const route = ROUTES.find(r => r.id === v.routeId);
+          if (!route) return v;
+          
+          // Advance progress (loop back to 0 when reaching 1)
+          const newProgress = (v.routeProgress + 0.005) % 1;
+          const newPosition = getPositionOnRoute(route, newProgress);
+          
+          return {
+            ...v,
+            routeProgress: newProgress,
+            position: newPosition,
+            occupancy: Math.max(0, Math.min(100, v.occupancy + (Math.random() - 0.5) * 10)),
+          };
+        })
       );
     }, 3000);
 
@@ -69,110 +71,117 @@ const MapView = () => {
     return "hsl(0, 84%, 60%)";
   };
 
-  const createCustomIcon = (type: string, occupancy: number) => {
-    const color = type === "bus" ? "#9C1C3B" : "#3C3C3C";
-    const occupancyColor = getOccupancyColor(occupancy);
+  // Convert lat/lng to pixel position (approximate for Cancún area)
+  const latLngToPixel = (lat: number, lng: number) => {
+    const mapCenter = { lat: 21.1619, lng: -86.8515 };
+    const scale = 8000; // Ajusta según sea necesario
     
-    return L.divIcon({
-      className: "custom-marker",
-      html: `
-        <div style="
-          background: ${color};
-          width: 32px;
-          height: 32px;
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          border: 3px solid ${occupancyColor};
-          box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-        ">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="white">
-            <path d="M5 11a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-5a1 1 0 0 0-1-1H5zM17 11a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-5a1 1 0 0 0-1-1h-1zM5 6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v2h2v8h-2v2a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-2H3V8h2V6z"/>
-          </svg>
-        </div>
-      `,
-      iconSize: [32, 32],
-      iconAnchor: [16, 16],
-    });
+    const x = ((lng - mapCenter.lng) * scale) + 50;
+    const y = ((mapCenter.lat - lat) * scale) + 50;
+    
+    return { x: `${x}%`, y: `${y}%` };
   };
 
-  const MapContent = () => (
-    <>
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
-      
-      {vehicles.map((vehicle) => (
-        <Marker
-          key={vehicle.id}
-          position={vehicle.position}
-          icon={createCustomIcon(vehicle.type, vehicle.occupancy)}
-        >
-          <Popup>
-            <div className="p-2 min-w-[200px]">
-              <h3 className="font-poppins font-semibold text-base mb-2 text-primary">
-                {vehicle.route}
-              </h3>
-              <div className="space-y-1 text-sm">
-                <div className="flex items-center gap-2">
-                  <Bus className="w-4 h-4 text-primary" />
-                  <span className="font-medium">
-                    {vehicle.type === "bus" ? "Autobús" : "Combi"}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Users className="w-4 h-4 text-primary" />
-                  <span>
-                    Ocupación: {vehicle.occupancy.toFixed(0)}% ({Math.floor((vehicle.occupancy / 100) * vehicle.capacity)}/{vehicle.capacity})
-                  </span>
-                </div>
-                <div className="text-muted-foreground">
-                  <p>Empresa: {vehicle.company}</p>
-                  <p>Kilómetros: {vehicle.km} km</p>
-                  <p>Horas laboradas: {vehicle.hours}h</p>
-                </div>
-                <div className="mt-2 pt-2 border-t">
-                  <div 
-                    className="h-2 rounded-full"
-                    style={{ 
-                      background: getOccupancyColor(vehicle.occupancy),
-                      width: `${vehicle.occupancy}%`
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
-          </Popup>
-        </Marker>
-      ))}
-      
-      <Circle
-        center={cancunCenter}
-        radius={5000}
-        pathOptions={{ 
-          color: "#9C1C3B", 
-          fillColor: "#9C1C3B", 
-          fillOpacity: 0.1 
-        }}
-      />
-    </>
-  );
+  const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
 
   return (
-    <div className="relative w-full h-full">
-      <MapContainer
-        center={cancunCenter}
-        zoom={13}
-        className="w-full h-full rounded-lg"
+    <div className="relative w-full h-full overflow-hidden">
+      {/* Google Maps iframe de fondo */}
+      <iframe 
+        src="https://www.google.com/maps/d/u/2/embed?mid=1UhpyGzDJyrttUoOh9tzaU6CkYcdgToM&ehbc=2E312F"
+        className="w-full h-full rounded-lg border-0"
         style={{ minHeight: "500px" }}
-      >
-        <MapContent />
-      </MapContainer>
+        loading="lazy"
+        title="Rutas de Transporte Público Cancún"
+      />
+
+      {/* Capa de marcadores de vehículos */}
+      <div className="absolute inset-0 pointer-events-none">
+        {vehicles.map((vehicle) => {
+          const pos = latLngToPixel(vehicle.position[0], vehicle.position[1]);
+          const route = ROUTES.find(r => r.id === vehicle.routeId);
+          const color = vehicle.type === "bus" ? "#9C1C3B" : "#3C3C3C";
+          const occupancyColor = getOccupancyColor(vehicle.occupancy);
+          
+          return (
+            <div
+              key={vehicle.id}
+              className="absolute pointer-events-auto cursor-pointer transition-all duration-300 hover:scale-110"
+              style={{
+                left: pos.x,
+                top: pos.y,
+                transform: 'translate(-50%, -50%)',
+              }}
+              onClick={() => setSelectedVehicle(vehicle)}
+            >
+              <div
+                style={{
+                  background: color,
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: `3px solid ${occupancyColor}`,
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                }}
+              >
+                <Bus className="w-4 h-4 text-white" />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Popup de información del vehículo */}
+      {selectedVehicle && (
+        <div 
+          className="absolute top-4 right-4 bg-card shadow-institutional rounded-lg p-4 max-w-sm pointer-events-auto z-10"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={() => setSelectedVehicle(null)}
+            className="absolute top-2 right-2 text-muted-foreground hover:text-foreground"
+          >
+            ✕
+          </button>
+          <h3 className="font-poppins font-semibold text-base mb-2 text-primary">
+            Ruta: {selectedVehicle.routeName}
+          </h3>
+          <div className="space-y-1 text-sm">
+            <div className="flex items-center gap-2">
+              <Bus className="w-4 h-4 text-primary" />
+              <span className="font-medium">
+                {selectedVehicle.type === "bus" ? "Autobús" : "Combi"}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Users className="w-4 h-4 text-primary" />
+              <span>
+                Ocupación: {selectedVehicle.occupancy.toFixed(0)}% ({Math.floor((selectedVehicle.occupancy / 100) * selectedVehicle.capacity)}/{selectedVehicle.capacity})
+              </span>
+            </div>
+            <div className="text-muted-foreground">
+              <p>Empresa: {selectedVehicle.company}</p>
+              <p>Kilómetros: {selectedVehicle.km} km</p>
+              <p>Horas laboradas: {selectedVehicle.hours}h</p>
+            </div>
+            <div className="mt-2 pt-2 border-t">
+              <div 
+                className="h-2 rounded-full"
+                style={{ 
+                  background: getOccupancyColor(selectedVehicle.occupancy),
+                  width: `${selectedVehicle.occupancy}%`
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Status Bar */}
-      <div className="absolute bottom-4 left-4 right-4 bg-card shadow-institutional rounded-lg p-4 backdrop-blur-sm bg-opacity-95">
+      <div className="absolute bottom-4 left-4 right-4 bg-card shadow-institutional rounded-lg p-4 backdrop-blur-sm bg-opacity-95 pointer-events-auto">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
           <div className="text-center">
             <p className="font-poppins font-semibold text-lg text-primary">
